@@ -1,0 +1,349 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== Users & Authentication ====================
+
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+  OWNER
+}
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  username          String   @unique
+  passwordHash      String
+  role              UserRole @default(USER)
+  profileImage      String?  // URL to profile image
+  bio               String?
+  isEmailVerified   Boolean  @default(false)
+  isBanned          Boolean  @default(false)
+  banReason         String?
+  bannedAt          DateTime?
+  lastLoginAt       DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  profile           Profile?
+  games             Game[]
+  gameResults       GameResult[]
+  rooms             Room[]     // Rooms created by user
+  roomPlayers       RoomPlayer[]
+  achievements      UserAchievement[]
+  titles            UserTitle[]
+  missions          UserMission[]
+  moderations       Moderation[]
+}
+
+model Profile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  level             Int      @default(1)
+  totalExp          BigInt   @default(0)
+  wins              Int      @default(0)
+  losses            Int      @default(0)
+  gamesPlayed       Int      @default(0)
+  bestWpm           Float    @default(0)
+  averageWpm        Float    @default(0)
+  bestAccuracy      Float    @default(0)
+  averageAccuracy   Float    @default(0)
+  rank              String   @default("BRONZE")
+  rankPoints        Int      @default(0)
+  selectedTitle     String?
+  totalCombo        Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ==================== Typing Problems ====================
+
+enum ProblemCategory {
+  HIRAGANA
+  WORD
+  SHORT_TEXT
+  LONG_TEXT
+  ENGLISH_WORD
+  NUMBER
+  SYMBOL
+  KANJI
+}
+
+enum Difficulty {
+  VERY_EASY
+  EASY
+  NORMAL
+  HARD
+  VERY_HARD
+}
+
+model TypingProblem {
+  id                String   @id @default(cuid())
+  problemText       String
+  category          ProblemCategory
+  difficulty        Difficulty
+  minLevel          Int      @default(1)
+  isActive          Boolean  @default(true)
+  createdBy         String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  gameResults       GameResult[]
+}
+
+// ==================== Games & Results ====================
+
+enum GameMode {
+  PRACTICE
+  FRIEND_BATTLE
+  RANKED_MATCH
+}
+
+model Game {
+  id                String   @id @default(cuid())
+  hostId            String
+  mode              GameMode
+  problemId         String
+  startedAt         DateTime @default(now())
+  endedAt           DateTime?
+  duration          Int?
+  isCompleted       Boolean  @default(false)
+  createdAt         DateTime @default(now())
+
+  // Relations
+  host              User     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  problem           TypingProblem @relation(fields: [problemId], references: [id])
+  results           GameResult[]
+  room              Room?
+}
+
+model GameResult {
+  id                String   @id @default(cuid())
+  gameId            String
+  userId            String
+  problemId         String
+  wpm               Float    @default(0)
+  accuracy          Float    @default(0)
+  mistakes          Int      @default(0)
+  timeSpent         Int      @default(0)
+  expGained         Int      @default(0)
+  comboAchieved     Int      @default(0)
+  rank              Int      @default(0)
+  createdAt         DateTime @default(now())
+
+  // Relations
+  game              Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  problem           TypingProblem @relation(fields: [problemId], references: [id])
+}
+
+// ==================== Rooms ====================
+
+model Room {
+  id                String   @id @default(cuid())
+  code              String   @unique
+  gameId            String?  @unique
+  hostId            String
+  maxPlayers        Int      @default(8)
+  isActive          Boolean  @default(true)
+  difficulty        Difficulty
+  category          ProblemCategory
+  createdAt         DateTime @default(now())
+  expiresAt         DateTime
+
+  // Relations
+  host              User     @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  game              Game?    @relation(fields: [gameId], references: [id], onDelete: SetNull)
+  players           RoomPlayer[]
+}
+
+model RoomPlayer {
+  id                String   @id @default(cuid())
+  roomId            String
+  userId            String
+  isReady           Boolean  @default(false)
+  joinedAt          DateTime @default(now())
+
+  // Relations
+  room              Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+}
+
+// ==================== Achievements & Titles ====================
+
+model Achievement {
+  id                String   @id @default(cuid())
+  name              String   @unique
+  description       String
+  icon              String?
+  condition         String
+  createdAt         DateTime @default(now())
+
+  // Relations
+  userAchievements  UserAchievement[]
+}
+
+model UserAchievement {
+  id                String   @id @default(cuid())
+  userId            String
+  achievementId     String
+  unlockedAt        DateTime @default(now())
+
+  // Relations
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement       Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, achievementId])
+}
+
+model Title {
+  id                String   @id @default(cuid())
+  name              String   @unique
+  description       String?
+  icon              String?
+  condition         String
+  createdAt         DateTime @default(now())
+
+  // Relations
+  userTitles        UserTitle[]
+}
+
+model UserTitle {
+  id                String   @id @default(cuid())
+  userId            String
+  titleId           String
+  obtainedAt        DateTime @default(now())
+
+  // Relations
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title             Title    @relation(fields: [titleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, titleId])
+}
+
+// ==================== Missions ====================
+
+model Mission {
+  id                String   @id @default(cuid())
+  name              String
+  description       String
+  missionType       String
+  targetValue       Int
+  rewardExp         Int      @default(100)
+  dailyResetTime    String   @default("00:00")
+  createdAt         DateTime @default(now())
+
+  // Relations
+  userMissions      UserMission[]
+}
+
+model UserMission {
+  id                String   @id @default(cuid())
+  userId            String
+  missionId         String
+  progress          Int      @default(0)
+  isCompleted       Boolean  @default(false)
+  completedAt       DateTime?
+  lastResetAt       DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  // Relations
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mission           Mission  @relation(fields: [missionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, missionId])
+}
+
+// ==================== Rankings ====================
+
+model Ranking {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  username          String
+  level             Int
+  totalExp          BigInt
+  wins              Int
+  losses            Int
+  bestWpm           Float
+  averageWpm        Float
+  bestAccuracy      Float
+  averageAccuracy   Float
+  gamesPlayed       Int
+  rank              String
+  rankPoints        Int
+  weeklyPosition    Int?
+  monthlyPosition   Int?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ==================== Events ====================
+
+model Event {
+  id                String   @id @default(cuid())
+  name              String
+  description       String?
+  eventType         String
+  multiplier        Float    @default(1.0)
+  startDate         DateTime
+  endDate           DateTime
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ==================== Bans & Moderations ====================
+
+model Ban {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  reason            String
+  bannedBy          String
+  bannedAt          DateTime @default(now())
+  unbanAt           DateTime?
+  isPermanent       Boolean  @default(true)
+  createdAt         DateTime @default(now())
+}
+
+model Moderation {
+  id                String   @id @default(cuid())
+  userId            String
+  moderatorId       String
+  action            String
+  reason            String
+  expiresAt         DateTime?
+  createdAt         DateTime @default(now())
+
+  // Relations
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  moderator         User     @relation(name: "ModeratedBy", fields: [moderatorId], references: [id], onDelete: Restrict)
+}
+
+// ==================== Password Reset ====================
+
+model PasswordReset {
+  id                String   @id @default(cuid())
+  email             String
+  token             String   @unique
+  expiresAt         DateTime
+  usedAt            DateTime?
+  createdAt         DateTime @default(now())
+}
